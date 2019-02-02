@@ -20,6 +20,7 @@ USER root
 
 ENV PYTHONDONTWRITEBYTECODE yes
 
+COPY kubernetes.repo /etc/yum.repos.d/kubernetes.repo
 RUN yum install -y  \
 	PyYAML bind-utils \
 	openssl \
@@ -27,7 +28,7 @@ RUN yum install -y  \
 	firewalld-filesystem \
 	libpcap \
 	hostname \
-	kubernetes-client \
+	kubectl \
 	iproute strace socat && \
 	yum clean all
 
@@ -56,7 +57,7 @@ RUN mkdir -p /opt/cni/bin
 # Built in ../../go_controller, then the binaries are copied here.
 # put things where they are in the rpm
 RUN mkdir -p /usr/libexec/cni/
-COPY ovn-k8s-overlay ovnkube ovn-kube-util /usr/bin/
+COPY ovnkube ovn-kube-util /usr/bin/
 COPY ovn-k8s-cni-overlay /usr/libexec/cni/ovn-k8s-cni-overlay
 
 # ovnkube.sh is the entry point. This script examines environment

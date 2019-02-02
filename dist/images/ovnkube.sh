@@ -145,7 +145,7 @@ wait_for_event () {
 ready_to_start_node () {
 
   # See if ep is available ...
-  ovn_master_host=$(KUBECONFIG=/etc/origin/node/node.kubeconfig kubectl get ep -n ovn-kubernetes ovnkube-master 2>/dev/null | grep 6642 | sed 's/:/ /' | gawk '/ovnkube-master/{ print $2 }')
+  ovn_master_host=$(kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) get ep -n ovn-kubernetes ovnkube-master 2>/dev/null | grep 6642 | sed 's/:/ /' | gawk '/ovnkube-master/{ print $2 }')
   if [[ ${ovn_master_host} == "" ]] ; then
     # ... if not (we may be on the master) see if northd is up
     get_master_ovn_vars
@@ -750,7 +750,7 @@ echo "================== ovnkube.sh --- version: ${ovnkube_version} ============
   display_version
 
   # get api server
-  k8s_server=$(KUBECONFIG=/etc/origin/node/node.kubeconfig kubectl config view --minify | gawk '/server:/{ print $2 }')
+  k8s_server="https://${KUBERNETES_PORT_443_TCP_ADDR}:${KUBERNETES_SERVICE_PORT_HTTPS}"
   k8s_apiserver=${K8S_APISERVER:-${k8s_server}}
 
   # display_env
@@ -823,3 +823,4 @@ echo "================== ovnkube.sh --- version: ${ovnkube_version} ============
   esac
 
 exit 0
+
