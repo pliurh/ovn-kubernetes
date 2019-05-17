@@ -48,7 +48,7 @@ RUN rpm -i http://cbs.centos.org/kojifiles/packages/openvswitch/${ovsVer}/${ovsS
 RUN rpm -i http://cbs.centos.org/kojifiles/packages/openvswitch/${ovsVer}/${ovsSubVer}/${rpmArch}/openvswitch-ovn-vtep-${ovsVer}-${ovsSubVer}.${rpmArch}.rpm
 RUN rpm -i http://cbs.centos.org/kojifiles/packages/openvswitch/${ovsVer}/${ovsSubVer}/${rpmArch}/openvswitch-devel-${ovsVer}-${ovsSubVer}.${rpmArch}.rpm
 RUN rpm -i http://dl.fedoraproject.org/pub/epel/7/x86_64/Packages/c/containernetworking-cni-0.5.1-1.el7.x86_64.rpm
-RUN rm -rf /var/cache/yum
+#RUN rm -rf /var/cache/yum
 
 RUN mkdir -p /var/run/openvswitch
 RUN mkdir -p /etc/cni/net.d
