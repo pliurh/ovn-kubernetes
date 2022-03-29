@@ -175,6 +175,7 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				nodeSubnet string = "10.1.2.0/24"
 				nodeHOIP   string = "10.1.2.3"
 				nodeHOMAC  string = "0a:58:0a:01:02:03"
+				hoSubnet   string = "11.1.0.0/16"
 			)
 
 			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
@@ -197,9 +198,32 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				UUID: libovsdbops.BuildNamedUUID(),
 			}
 
+			ovnClusterRouterLRP := &nbdb.LogicalRouterPort{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				Name:     types.GWRouterToJoinSwitchPrefix + types.OVNClusterRouter,
+				Networks: []string{"100.64.0.1/16"},
+			}
+			ovnClusterRouter.Ports = []string{ovnClusterRouterLRP.UUID}
+
+			nodeGWRouter := &nbdb.LogicalRouter{
+				Name: types.GWRouterPrefix + nodeName,
+				UUID: libovsdbops.BuildNamedUUID(),
+			}
+
+			nodeGWLRP := &nbdb.LogicalRouterPort{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				Name:     types.GWRouterToJoinSwitchPrefix + types.GWRouterPrefix + nodeName,
+				Networks: []string{"100.64.0.2/16"},
+			}
+
+			nodeGWRouter.Ports = []string{nodeGWLRP.UUID}
+
 			initialNBDB := []libovsdbtest.TestData{
 				nodeSwitch,
 				ovnClusterRouter,
+				ovnClusterRouterLRP,
+				nodeGWRouter,
+				nodeGWLRP,
 			}
 
 			// pre-existing sbdb objects
@@ -243,7 +267,18 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 			}
 
 			// make sure the expected LRP is created and added to cluster router
-			expectedLRP := &nbdb.LogicalRouterPolicy{
+			expectedLRP1 := &nbdb.LogicalRouterPolicy{
+				Priority: 1002,
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1-gr",
+				},
+				Action:   nbdb.LogicalRouterPolicyActionReroute,
+				Nexthops: []string{nodeHOIP},
+				Match:    "ip4.src == 100.64.0.2 && ip4.dst == 11.1.0.0/16",
+				UUID:     libovsdbops.BuildNamedUUID(),
+			}
+
+			expectedLRP2 := &nbdb.LogicalRouterPolicy{
 				Priority: 1002,
 				ExternalIDs: map[string]string{
 					"name": "hybrid-subnet-node1",
@@ -254,8 +289,28 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				UUID:     libovsdbops.BuildNamedUUID(),
 			}
 
+			expectedLRSR := &nbdb.LogicalRouterStaticRoute{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				IPPrefix: hoSubnet,
+				Nexthop:  nodeHOIP,
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1",
+				},
+			}
+
 			nodeSwitch.Ports = []string{expectedLSP.UUID}
-			ovnClusterRouter.Policies = []string{expectedLRP.UUID}
+			ovnClusterRouter.Policies = []string{expectedLRP1.UUID, expectedLRP2.UUID}
+			ovnClusterRouter.StaticRoutes = []string{expectedLRSR.UUID}
+
+			expectedGRLRSR := &nbdb.LogicalRouterStaticRoute{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				IPPrefix: hoSubnet,
+				Nexthop:  "100.64.0.1",
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1",
+				},
+			}
+			nodeGWRouter.StaticRoutes = []string{expectedGRLRSR.UUID}
 
 			expectedMACBinding := &sbdb.MACBinding{
 				UUID:        libovsdbops.BuildNamedUUID(),
@@ -286,8 +341,14 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 			expectedNBDatabaseState := []libovsdbtest.TestData{
 				nodeSwitch,
 				ovnClusterRouter,
+				ovnClusterRouterLRP,
+				nodeGWRouter,
+				nodeGWLRP,
 				expectedLSP,
-				expectedLRP,
+				expectedLRP1,
+				expectedLRP2,
+				expectedLRSR,
+				expectedGRLRSR,
 			}
 
 			expectedSBDatabaseState := []libovsdbtest.TestData{
@@ -296,7 +357,7 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 			}
 
 			Eventually(fexec.CalledMatchesExpected, 2).Should(BeTrue(), fexec.ErrorDesc)
-			Eventually(libovsdbOvnNBClient).Should(libovsdbtest.HaveData(expectedNBDatabaseState))
+			Eventually(libovsdbOvnNBClient).Should(libovsdbtest.HaveDataIgnoringUUIDs(expectedNBDatabaseState))
 			Eventually(libovsdbOvnSBClient).Should(libovsdbtest.HaveDataIgnoringUUIDs(expectedSBDatabaseState))
 
 			err = fakeClient.CoreV1().Nodes().Delete(context.TODO(), nodeName, *metav1.NewDeleteOptions(0))
@@ -306,11 +367,17 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 
 			// LRP should have been deleted and removed
 			ovnClusterRouter.Policies = []string{}
+			// Static Route should have been deleted and removed
+			ovnClusterRouter.StaticRoutes = []string{}
+			nodeGWRouter.StaticRoutes = []string{}
 			// in a real db, deleting the LSP would remove the reference here, but in our testing ovsdb server it does not
 			// nodeSwitch.Ports = []string{}
 			expectedNBDatabaseState = []libovsdbtest.TestData{
 				ovnClusterRouter,
 				nodeSwitch,
+				nodeGWRouter,
+				nodeGWLRP,
+				ovnClusterRouterLRP,
 			}
 
 			// in a real db, deleting the HO LSP would result in the Mac Binding being removed as well
@@ -340,6 +407,7 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				nodeSubnet string = "10.1.2.0/24"
 				nodeHOIP   string = "10.1.2.3"
 				nodeHOMAC  string = "00:00:00:52:19:d2"
+				hoSubnet   string = "11.1.0.0/16"
 			)
 
 			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
@@ -362,7 +430,18 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				DynamicAddresses: &dynAdd,
 			}
 
-			existingLRP := &nbdb.LogicalRouterPolicy{
+			existingLRP1 := &nbdb.LogicalRouterPolicy{
+				Priority: 1002,
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1-gr",
+				},
+				Action:   nbdb.LogicalRouterPolicyActionReroute,
+				Nexthops: []string{nodeHOIP},
+				Match:    "ip4.src == 100.64.0.2 && ip4.dst == 11.1.0.0/16",
+				UUID:     libovsdbops.BuildNamedUUID(),
+			}
+
+			existingLRP2 := &nbdb.LogicalRouterPolicy{
 				Priority: 1002,
 				ExternalIDs: map[string]string{
 					"name": "hybrid-subnet-node1",
@@ -373,10 +452,34 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				UUID:     libovsdbops.BuildNamedUUID(),
 			}
 
+			existingLRSR := &nbdb.LogicalRouterStaticRoute{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				IPPrefix: hoSubnet,
+				Nexthop:  nodeHOIP,
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1",
+				},
+			}
+
+			existingGRLRSR := &nbdb.LogicalRouterStaticRoute{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				IPPrefix: hoSubnet,
+				Nexthop:  "100.64.0.1",
+				ExternalIDs: map[string]string{
+					"name": "hybrid-subnet-node1",
+				},
+			}
+
 			nodeSwitch := &nbdb.LogicalSwitch{
 				Name:  nodeName,
 				UUID:  libovsdbops.BuildNamedUUID(),
 				Ports: []string{existingLSP.UUID},
+			}
+
+			ovnClusterRouterLRP := &nbdb.LogicalRouterPort{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				Name:     types.GWRouterToJoinSwitchPrefix + types.OVNClusterRouter,
+				Networks: []string{"100.64.0.1/16"},
 			}
 
 			ovnClusterRouter := &nbdb.LogicalRouter{
@@ -384,14 +487,33 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 				UUID: libovsdbops.BuildNamedUUID(),
 				// Something in the test harness causes this names uuid to be added again
 				// comment out for now
-				// Policies: []string{existingLRP.UUID},
+
+				Ports: []string{ovnClusterRouterLRP.UUID},
+			}
+			nodeGWLRP := &nbdb.LogicalRouterPort{
+				UUID:     libovsdbops.BuildNamedUUID(),
+				Name:     types.GWRouterToJoinSwitchPrefix + types.GWRouterPrefix + nodeName,
+				Networks: []string{"100.64.0.2/16"},
+			}
+
+			nodeGWRouter := &nbdb.LogicalRouter{
+				Name:         types.GWRouterPrefix + nodeName,
+				UUID:         libovsdbops.BuildNamedUUID(),
+				Ports:        []string{nodeGWLRP.UUID},
+				StaticRoutes: []string{existingGRLRSR.UUID},
 			}
 
 			initialNBDB := []libovsdbtest.TestData{
 				nodeSwitch,
 				ovnClusterRouter,
-				existingLRP,
+				existingLRP1,
+				existingLRP2,
+				existingLRSR,
+				existingGRLRSR,
 				existingLSP,
+				ovnClusterRouterLRP,
+				nodeGWRouter,
+				nodeGWLRP,
 			}
 
 			// pre-existing sbdb objects
@@ -456,7 +578,8 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 
 			Eventually(fexec.CalledMatchesExpected, 2).Should(BeTrue(), fexec.ErrorDesc)
 			// OVN DB state shouldn't change here
-			ovnClusterRouter.Policies = []string{existingLRP.UUID}
+			ovnClusterRouter.Policies = []string{existingLRP1.UUID, existingLRP2.UUID}
+			ovnClusterRouter.StaticRoutes = []string{existingLRSR.UUID}
 			Eventually(libovsdbOvnNBClient).Should(libovsdbtest.HaveData(dbSetup.NBData))
 			Eventually(libovsdbOvnSBClient).Should(libovsdbtest.HaveData(dbSetup.SBData))
 
