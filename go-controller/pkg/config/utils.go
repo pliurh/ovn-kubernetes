@@ -85,9 +85,9 @@ func ParseClusterSubnetEntries(clusterSubnetCmd string) ([]CIDRNetworkEntry, err
 		parsedClusterList = append(parsedClusterList, parsedClusterEntry)
 	}
 
-	if len(parsedClusterList) == 0 {
-		return nil, fmt.Errorf("failed to parse any CIDRs from %q", clusterSubnetCmd)
-	}
+	// if len(parsedClusterList) == 0 {
+	// 	return nil, fmt.Errorf("failed to parse any CIDRs from %q", clusterSubnetCmd)
+	// }
 
 	return parsedClusterList, nil
 }

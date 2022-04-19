@@ -291,8 +291,9 @@ var _ = Describe("Hybrid SDN Master Operations", func() {
 
 			expectedLRSR := &nbdb.LogicalRouterStaticRoute{
 				UUID:     libovsdbops.BuildNamedUUID(),
-				IPPrefix: hoSubnet,
+				IPPrefix: "100.64.0.2",
 				Nexthop:  nodeHOIP,
+				Policy: &nbdb.LogicalRouterStaticRoutePolicySrcIP,
 				ExternalIDs: map[string]string{
 					"name": "hybrid-subnet-node1",
 				},
