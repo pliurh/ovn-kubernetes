@@ -602,6 +602,12 @@ func (oc *Controller) updateResource(objectsToRetry *retryObjs, oldObj, newObj i
 		if !ok {
 			return fmt.Errorf("could not cast oldObj of type interface{} to *kapi.Node")
 		}
+		newNoHostSubnet := noHostSubnet(newNode)
+		oldNoHostSubnet := noHostSubnet(oldNode)
+
+		if oldNoHostSubnet != newNoHostSubnet {
+			return oc.addUpdateNodeEvent(newNode, &nodeSyncs{true, true, true, true})
+		}
 		// determine what actually changed in this update
 		_, nodeSync := oc.addNodeFailed.Load(newNode.Name)
 		_, failed := oc.nodeClusterRouterPortFailed.Load(newNode.Name)

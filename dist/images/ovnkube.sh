@@ -972,6 +972,7 @@ ovn-master() {
     ${egressip_enabled_flag} \
     ${egressfirewall_enabled_flag} \
     --metrics-bind-address ${ovnkube_master_metrics_bind_address} \
+    --no-hostsubnet-nodes='kubernetes.io/os=windows' \
     --host-network-namespace ${ovn_host_network_namespace} &
 
   echo "=============== ovn-master ========== running"
@@ -1225,6 +1226,7 @@ ovn-node() {
      ${ovnkube_node_mode_flag} \
     ${egress_interface} \
     --host-network-namespace ${ovn_host_network_namespace} \
+    --no-hostsubnet-nodes='kubernetes.io/os=windows' \
      ${ovnkube_node_mgmt_port_netdev_flag} &
 
   wait_for_event attempts=3 process_ready ovnkube
