@@ -86,13 +86,23 @@ func NewNode(
 	podInformer cache.SharedIndexInformer,
 	eventHandlerCreateFunction informer.EventHandlerCreateFunction,
 ) (*Node, error) {
-
+	var controller nodeController
 	nodeLister := listers.NewNodeLister(nodeInformer.GetIndexer())
 
-	controller, err := newNodeController(kube, nodeName, nodeLister)
-	if err != nil {
+	if node, err := kube.GetNode(nodeName); err != nil {
 		return nil, err
+	} else if houtil.IsHybridOverlayNode(node) {
+		controller, err = newHONodeController(kube, nodeName, nodeLister)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		controller, err = newNodeController(kube, nodeName, nodeLister)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	n := &Node{controller: controller}
 	n.nodeEventHandler = eventHandlerCreateFunction("node", nodeInformer,
 		func(obj interface{}) error {

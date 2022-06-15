@@ -235,6 +235,7 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
 				Items: []v1.Node{
 					*createNode(node1Name, "linux", "10.0.0.1", nil),
+					*createNode(thisNode, "linux", "10.0.0.2", nil),
 				},
 			})
 
@@ -265,6 +266,7 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 				defer wg.Done()
 				n.nodeEventHandler.Run(1, stopChan)
 			}()
+			f.WaitForCacheSync(stopChan)
 
 			// FIXME
 			// Eventually(fexec.CalledMatchesExpected, 2).Should(BeTrue(), fexec.ErrorDesc)
@@ -285,6 +287,7 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
 				Items: []v1.Node{
 					*createNode(node1Name, "linux", node1IP, annotations),
+					*createNode(thisNode, "linux", "10.0.0.2", nil),
 				},
 			})
 
@@ -433,6 +436,7 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 						hotypes.HybridOverlayNodeSubnet: node1Subnet,
 						hotypes.HybridOverlayDRMAC:      node1DrMAC,
 					}),
+					*createNode(thisNode, "linux", "10.0.0.3", nil),
 				},
 			})
 
@@ -482,7 +486,10 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 			)
 
 			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
-				Items: []v1.Node{*createNode(node1Name, "linux", node1IP, nil)},
+				Items: []v1.Node{
+					*createNode(node1Name, "linux", node1IP, nil),
+					*createNode(thisNode, "linux", "10.0.0.3", nil),
+				},
 			})
 
 			addNodeSetupCmds(fexec, thisNode)
@@ -528,7 +535,11 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 
 	ovntest.OnSupportedPlatformsIt("removes stale pod flows on initial sync", func() {
 		app.Action = func(ctx *cli.Context) error {
-			fakeClient := fake.NewSimpleClientset()
+			fakeClient := fake.NewSimpleClientset(&v1.NodeList{
+				Items: []v1.Node{
+					*createNode(thisNode, "linux", "10.0.0.2", nil),
+				},
+			})
 
 			addNodeSetupCmds(fexec, thisNode)
 
@@ -603,6 +614,9 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 			fakeClient := fake.NewSimpleClientset([]runtime.Object{
 				ns,
 				createPod("test", "pod1", thisNode, pod1CIDR, pod1MAC),
+				createNode(thisNode, "linux", "10.0.0.2", map[string]string{
+					"k8s.ovn.org/node-gateway-router-lrp-ifaddr": "{\"ipv4\":\"100.64.0.4/16\"}",
+				}),
 			}...)
 
 			_, hybMAC := addNodeSetupCmds(fexec, thisNode)
@@ -613,6 +627,29 @@ var _ = Describe("Hybrid Overlay Node Linux Operations", func() {
 				Output: ` cookie=0x7fdcde17, duration=29398.539s, table=10, n_packets=0, n_bytes=0, priority=100,ip,nw_dst=` + pod1CIDR + ` actions=mod_dl_src:` + hybMAC + `,mod_dl_dst:` + pod1MAC + `,output:ext
  cookie=0x0, duration=29398.687s, table=10, n_packets=0, n_bytes=0, priority=0 actions=drop`,
 			})
+			// FIXME: the following command is executed in every EnsureHybridOverlayBridge call.
+			// we shall reduce the command invokation by storing the node subnet in the controller object.
+			fexec.AddFakeCmd(&ovntest.ExpectedCmd{
+				Cmd:    "ovn-nbctl --timeout=15 get logical_switch mynode other-config:subnet",
+				Output: testNodeSubnet,
+			})
+			fexec.AddFakeCmd(&ovntest.ExpectedCmd{
+				Cmd:    "ovn-nbctl --timeout=15 get logical_switch mynode other-config:subnet",
+				Output: testNodeSubnet,
+			})
+			fexec.AddFakeCmd(&ovntest.ExpectedCmd{
+				Cmd:    "ovn-nbctl --timeout=15 get logical_switch mynode other-config:subnet",
+				Output: testNodeSubnet,
+			})
+			fexec.AddFakeCmd(&ovntest.ExpectedCmd{
+				Cmd:    "ovn-nbctl --timeout=15 get logical_switch mynode other-config:subnet",
+				Output: testNodeSubnet,
+			})
+			fexec.AddFakeCmd(&ovntest.ExpectedCmd{
+				Cmd:    "ovn-nbctl --timeout=15 get logical_switch mynode other-config:subnet",
+				Output: testNodeSubnet,
+			})
+
 			fexec.AddFakeCmdsNoOutputNoError([]string{
 				// provide cover for up to 3 runs of flows thread
 				"ovs-ofctl dump-flows --no-stats br-ext table=20",
