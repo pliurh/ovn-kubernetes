@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog/v2"
 	utilnet "k8s.io/utils/net"
 
+	"github.com/ovn-org/libovsdb/client"
 	hocontroller "github.com/ovn-org/ovn-kubernetes/go-controller/hybrid-overlay/pkg/controller"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/informer"
@@ -1017,6 +1018,10 @@ func (oc *Controller) deleteStaleNodeChassis(node *kapi.Node) error {
 			return item.Hostname == node.Name
 		}
 		if err = libovsdbops.DeleteChassisWithPredicate(oc.sbClient, p); err != nil {
+			if err == client.ErrNotFound {
+				klog.Infof("deleteStaleNodeChassis: no chassis %s found", node.Name)
+				return nil
+			}
 			// Send an event and Log on failure
 			oc.recorder.Eventf(node, kapi.EventTypeWarning, "ErrorMismatchChassis",
 				"Node %s is now with a new chassis ID. Its stale chassis entry is still in the SBDB",
@@ -1319,6 +1324,16 @@ func (oc *Controller) addUpdateNodeEvent(node *kapi.Node, nSyncs *nodeSyncs) err
 	var err error
 
 	if noHostSubnet := noHostSubnet(node); noHostSubnet {
+		klog.Infof("Cleanup the OVN objects of Node %q if it's a noHostSubnet node", node.Name)
+		nodeSubnets, _ := util.ParseNodeHostSubnetAnnotation(node)
+		if err := oc.deleteNode(node.Name, nodeSubnets); err != nil {
+			return err
+		}
+		oc.addNodeFailed.Delete(node.Name)
+		oc.mgmtPortFailed.Delete(node.Name)
+		oc.gatewaysFailed.Delete(node.Name)
+		oc.nodeClusterRouterPortFailed.Delete(node.Name)
+
 		err := oc.lsManager.AddNoHostSubnetNode(node.Name)
 		if err != nil {
 			return fmt.Errorf("nodeAdd: error adding noHost subnet for node %s: %w", node.Name, err)

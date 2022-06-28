@@ -171,7 +171,7 @@ func nameToCookie(nodeName string) string {
 // nodes in the cluster
 func (n *NodeController) hybridOverlayNodeUpdate(node *kapi.Node) error {
 	if !houtil.IsHybridOverlayNode(node) {
-		return nil
+		return n.DeleteNode(node)
 	}
 
 	cidr, nodeIP, drMAC, err := getNodeDetails(node)
@@ -509,22 +509,52 @@ func (n *NodeController) EnsureHybridOverlayBridge(node *kapi.Node) error {
 			}
 		}
 	} else {
+		// Add per-node routes for HO subnet if HybridOverlay.ClusterSubnets is absent in config
 		nodes, err := n.nodeLister.List(labels.Everything())
 		if err != nil {
 			return err
 		}
+
+		link, err := netlink.LinkByName(types.K8sMgmtIntfName)
+		if err != nil {
+			return fmt.Errorf("failed to get link %s: %v", types.K8sMgmtIntfName, err)
+		}
+		routes, err := netlink.RouteList(link, netlink.FAMILY_V4)
+		if err != nil {
+			return fmt.Errorf("failed to list route for device %s: %v", types.K8sMgmtIntfName, err)
+		}
+
 		for _, node := range nodes {
-			if subnet, _ := houtil.ParseHybridOverlayHostSubnet(node); subnet != nil {
-				route := &netlink.Route{
-					Dst:       subnet,
-					LinkIndex: mgmtPortLink.Attrs().Index,
-					Scope:     netlink.SCOPE_UNIVERSE,
-					Gw:        n.drIP,
+			if houtil.IsHybridOverlayNode(node) {
+				if subnet, _ := houtil.ParseHybridOverlayHostSubnet(node); subnet != nil {
+					route := &netlink.Route{
+						Dst:       subnet,
+						LinkIndex: mgmtPortLink.Attrs().Index,
+						Scope:     netlink.SCOPE_UNIVERSE,
+						Gw:        n.drIP,
+					}
+					err := netlink.RouteAdd(route)
+					if err != nil && !os.IsExist(err) {
+						return fmt.Errorf("failed to add route for subnet %s via gateway %s: %v",
+							route.Dst, route.Gw, err)
+					}
 				}
-				err := netlink.RouteAdd(route)
-				if err != nil && !os.IsExist(err) {
-					return fmt.Errorf("failed to add route for subnet %s via gateway %s: %v",
-						route.Dst, route.Gw, err)
+			} else {
+				// Clean up routes added when a node used to be a HO node.
+				if subnets, _ := util.ParseNodeHostSubnetAnnotation(node); len(subnets) > 0 {
+					for _, subnet := range subnets {
+						if subnet.IP.To4() != nil {
+							for _, route := range routes {
+								if route.Gw.Equal(n.drIP) && route.Dst.Network() == subnet.Network() {
+									err = netlink.RouteDel(&route)
+									if err != nil {
+										return fmt.Errorf("failed to delete route '%s via %s' for link %s : %v",
+											route.Dst.String(), route.Gw.String(), link.Attrs().Name, err)
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 		}

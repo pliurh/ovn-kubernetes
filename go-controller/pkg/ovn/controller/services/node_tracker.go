@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	houtil "github.com/ovn-org/ovn-kubernetes/go-controller/hybrid-overlay/pkg/util"
 	globalconfig "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 
@@ -94,7 +95,8 @@ func newNodeTracker(nodeInformer coreinformers.NodeInformer) *nodeTracker {
 			// updateNode needs to be called only when hostSubnet annotation has changed or
 			// if L3Gateway annotation's ip addresses have changed or the name of the node (very rare)
 			// has changed. No need to trigger update for any other field change.
-			if util.NodeSubnetAnnotationChanged(oldObj, newObj) || util.NodeL3GatewayAnnotationChanged(oldObj, newObj) || oldObj.Name != newObj.Name {
+			if util.NodeSubnetAnnotationChanged(oldObj, newObj) || util.NodeL3GatewayAnnotationChanged(oldObj, newObj) || oldObj.Name != newObj.Name ||
+				houtil.IsHybridOverlayNode(oldObj) != houtil.IsHybridOverlayNode(newObj) {
 				nt.updateNode(newObj)
 			}
 		},
@@ -166,7 +168,7 @@ func (nt *nodeTracker) removeNode(nodeName string) {
 func (nt *nodeTracker) updateNode(node *v1.Node) {
 	klog.V(2).Infof("Processing possible switch / router updates for node %s", node.Name)
 	hsn, err := util.ParseNodeHostSubnetAnnotation(node)
-	if err != nil || hsn == nil {
+	if err != nil || hsn == nil || houtil.IsHybridOverlayNode(node) {
 		// usually normal; means the node's gateway hasn't been initialized yet
 		klog.Infof("Node %s has invalid / no HostSubnet annotations (probably waiting on initialization): %v", node.Name, err)
 		nt.removeNode(node.Name)

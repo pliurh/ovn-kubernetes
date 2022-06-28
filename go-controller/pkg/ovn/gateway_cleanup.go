@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	libovsdbclient "github.com/ovn-org/libovsdb/client"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/libovsdbops"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/nbdb"
 
@@ -27,7 +28,7 @@ func (oc *Controller) gatewayCleanup(nodeName string) error {
 	var nextHops []net.IP
 
 	gwIPAddrs, err := util.GetLRPAddrs(oc.nbClient, types.GWRouterToJoinSwitchPrefix+gatewayRouter)
-	if err != nil {
+	if err != nil && err.Error() != fmt.Sprintf("unable to find router port %s: %v", types.GWRouterToJoinSwitchPrefix+gatewayRouter, libovsdbclient.ErrNotFound) {
 		return err
 	}
 

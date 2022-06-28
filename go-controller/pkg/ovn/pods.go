@@ -79,9 +79,11 @@ func (oc *Controller) syncPodsRetriable(pods []interface{}) error {
 		}
 		sw.UUID, _ = oc.lsManager.GetUUID(n.Name)
 
-		ops, err = libovsdbops.DeleteLogicalSwitchPortsWithPredicateOps(oc.nbClient, ops, &sw, p)
-		if err != nil {
-			return fmt.Errorf("could not generate ops to delete stale ports from logical switch %s (%+v)", n.Name, err)
+		if sw.UUID != "" {
+			ops, err = libovsdbops.DeleteLogicalSwitchPortsWithPredicateOps(oc.nbClient, ops, &sw, p)
+			if err != nil {
+				return fmt.Errorf("could not generate ops to delete stale ports from logical switch %s (%+v)", n.Name, err)
+			}
 		}
 	}
 

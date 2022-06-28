@@ -776,10 +776,6 @@ func shouldUpdate(node, oldNode *kapi.Node) (bool, error) {
 
 	if oldNoHostSubnet && newNoHostSubnet {
 		return false, nil
-	} else if oldNoHostSubnet && !newNoHostSubnet {
-		return false, fmt.Errorf("error updating node %s, cannot remove assigned hostsubnet, please delete node and recreate.", node.Name)
-	} else if !oldNoHostSubnet && newNoHostSubnet {
-		return false, fmt.Errorf("error updating node %s, cannot assign a hostsubnet to already created node, please delete node and recreate.", node.Name)
 	}
 
 	return true, nil
