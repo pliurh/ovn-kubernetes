@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	libovsdbclient "github.com/ovn-org/libovsdb/client"
 	libovsdb "github.com/ovn-org/libovsdb/ovsdb"
@@ -858,6 +859,7 @@ func buildNAT(
 	logicalPort string,
 	externalMac string,
 	externalIDs map[string]string,
+	externalPortRange string,
 ) *nbdb.NAT {
 	nat := &nbdb.NAT{
 		Type:        natType,
@@ -875,6 +877,9 @@ func buildNAT(
 		nat.ExternalMAC = &externalMac
 	}
 
+	if externalPortRange != "" {
+		nat.ExternalPortRange = externalPortRange
+	}
 	return nat
 }
 
@@ -895,7 +900,11 @@ func BuildSNAT(
 	if logicalIPMask != 32 && logicalIPMask != 128 {
 		logicalIPStr = logicalIP.String()
 	}
-	return buildNAT(nbdb.NATTypeSNAT, externalIPStr, logicalIPStr, logicalPort, "", externalIDs)
+	externalPortRange := os.Getenv("SNAT_EXTERNAL_PORT_RANGE")
+	if externalPortRange == "" {
+		externalPortRange = "61000-65535"
+	}
+	return buildNAT(nbdb.NATTypeSNAT, externalIPStr, logicalIPStr, logicalPort, "", externalIDs, externalPortRange)
 }
 
 // BuildDNATAndSNAT builds a logical router DNAT/SNAT
@@ -920,7 +929,9 @@ func BuildDNATAndSNAT(
 		logicalIPStr,
 		logicalPort,
 		externalMac,
-		externalIDs)
+		externalIDs,
+		"",
+	)
 }
 
 // isEquivalentNAT if it has same uuid. Otherwise, check if types match.
