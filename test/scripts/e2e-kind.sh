@@ -170,6 +170,9 @@ export NUM_WORKER_NODES=3
 if [ "$SINGLE_NODE_CLUSTER" == true ]; then
 	export NUM_WORKER_NODES=1
 fi
+
+
+
 ginkgo --nodes=${NUM_NODES} \
 	--focus=${FOCUS} \
 	--skip=${SKIPPED_TESTS} \
