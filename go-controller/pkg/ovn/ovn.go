@@ -124,18 +124,13 @@ func (oc *DefaultNetworkController) ensurePod(oldPod, pod *kapi.Pod, addPort boo
 		return nil
 	}
 
-	// skip the pods on no host subnet nodes
-	switchName := pod.Spec.NodeName
-	if oc.lsManager.IsNonHostSubnetSwitch(switchName) {
-		return nil
-	}
-
 	if oc.isPodScheduledinLocalZone(pod) {
 		klog.V(5).Infof("Ensuring zone local for Pod %s/%s in node %s", pod.Namespace, pod.Name, pod.Spec.NodeName)
 		return oc.ensureLocalZonePod(oldPod, pod, addPort)
 	}
 
-	klog.V(5).Infof("Ensuring zone remote for Pod %s/%s in node %s", pod.Namespace, pod.Name, pod.Spec.NodeName)
+	// Pods in no host subnet nodes can be seen as remote pods.
+	klog.V(5).Infof("Ensuring no zone local for Pod %s/%s in node %s", pod.Namespace, pod.Name, pod.Spec.NodeName)
 	return oc.ensureRemoteZonePod(oldPod, pod, addPort)
 }
 
