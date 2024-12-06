@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2"
 
 	controllerutil "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/controller"
+	udnv1 "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/crd/userdefinednetwork/v1"
 	nbdbops "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/libovsdb/ops"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/nbdb"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
@@ -36,6 +37,10 @@ type Manager interface {
 	// the network host vrf to the network gateway router. A network can only be
 	// added once otherwise an error will be returned.
 	AddNetwork(network util.NetInfo) error
+
+	// UpdateNetwork instructs the manager to update the network information if
+	// it is already known to the manager.
+	UpdateNetwork(network util.NetInfo, networkID int) error
 
 	// NeedsReconciliation checks the provided network information against the
 	// stored one and returns whether there is any change requires
@@ -104,6 +109,7 @@ type controller struct {
 func (c *controller) AddNetwork(network util.NetInfo) error {
 	c.Lock()
 	defer c.Unlock()
+	c.log.Info("add network", "name", network.GetNetworkName())
 
 	networkID := network.GetNetworkID()
 	if c.networkIDs[networkID] != "" {
@@ -132,6 +138,36 @@ func (c *controller) AddNetwork(network util.NetInfo) error {
 	return nil
 }
 
+func (c *controller) UpdateNetwork(network util.NetInfo, networkID int) error {
+	c.Lock()
+	defer c.Unlock()
+	name := network.GetNetworkName()
+	c.log.Info("add network", "name", name)
+
+	if c.networkIDs[networkID] == "" {
+		return fmt.Errorf("network %q is not tracked with ID %d",
+			name,
+			networkID,
+		)
+	}
+	if c.networks[name] == nil {
+		return fmt.Errorf("network name %q is not tracked", name)
+	}
+
+	info := &netInfo{NetInfo: network, id: networkID}
+	if network.IsDefault() {
+		c.tables[unix.RT_TABLE_MAIN] = networkID
+		info.table = unix.RT_TABLE_MAIN
+	}
+	c.networkIDs[networkID] = name
+	c.networks[name] = info
+
+	c.log.V(5).Info("Updated network", "name", name, "id", networkID)
+	c.reconcile(name)
+
+	return nil
+}
+
 func (c *controller) ForgetNetwork(name string) {
 	c.Lock()
 	defer c.Unlock()
@@ -152,10 +188,14 @@ func (c *controller) NeedsReconciliation(network util.NetInfo) bool {
 	defer c.RUnlock()
 
 	if c.networks[network.GetNetworkName()] == nil {
+		c.log.V(5).Info("cannot find network", "name", network.GetNetworkName())
 		return false
 	}
 
-	// TODO check if overlay mode changed
+	if network.GetTransportProtocol() != c.networks[network.GetNetworkName()].GetTransportProtocol() {
+		c.log.V(5).Info("Needs reconciling network", "name", network.GetNetworkName())
+		return true
+	}
 	return false
 }
 
@@ -359,11 +399,13 @@ func (c *controller) syncNetwork(network string) error {
 	}
 	router := info.GetNetworkScopedGWRouterName(c.node)
 
-	// skip routes in the pod network
-	// TODO do not skip these routes in no overlay mode
-	ignoreSubnets := make([]*net.IPNet, len(info.Subnets()))
-	for i, subnet := range info.Subnets() {
-		ignoreSubnets[i] = subnet.CIDR
+	var ignoreSubnets []*net.IPNet
+	if info.GetTransportProtocol() != string(udnv1.TransportProtocolNone) {
+		c.log.V(5).Info("network is in overlay mode, ignoring routes to host subnets")
+		ignoreSubnets = make([]*net.IPNet, len(info.Subnets()))
+		for i, subnet := range info.Subnets() {
+			ignoreSubnets[i] = subnet.CIDR
+		}
 	}
 
 	table := c.getTableForNetwork(info.id)
