@@ -79,6 +79,7 @@ usage() {
     echo "                 [-ic | --enable-interconnect]"
     echo "                 [-rae | --enable-route-advertisements]"
     echo "                 [-adv | --advertise-default-network]"
+    echo "                 [-noe | --enable-no-overlay]"
     echo "                 [--isolated]"
     echo "                 [-dns | --enable-dnsnameresolver]"
     echo "                 [-obs | --observability]"
@@ -147,6 +148,7 @@ usage() {
     echo "-obs | --observability                Enable OVN Observability feature."
     echo "-rae | --enable-route-advertisements  Enable route advertisements"
     echo "-adv | --advertise-default-network    Applies a RouteAdvertisements configuration to advertise the default network on all nodes"
+    echo "-noe | --enable-no-overlay            Enable no overlay" 
     echo ""
 }
 
@@ -328,6 +330,8 @@ parse_args() {
                                                   ;;
             -adv | --advertise-default-network) ADVERTISE_DEFAULT_NETWORK=true
                                                   ;;
+            -noe | --no-overlay-enable)         ENABLE_NO_OVERLAY=true
+                                                  ;;
             -ic | --enable-interconnect )       OVN_ENABLE_INTERCONNECT=true
                                                 ;;
             --disable-ovnkube-identity)         OVN_ENABLE_OVNKUBE_IDENTITY=false
@@ -417,6 +421,7 @@ print_params() {
      echo "ENABLE_NETWORK_SEGMENTATION= $ENABLE_NETWORK_SEGMENTATION"
      echo "ENABLE_ROUTE_ADVERTISEMENTS= $ENABLE_ROUTE_ADVERTISEMENTS"
      echo "ADVERTISE_DEFAULT_NETWORK = $ADVERTISE_DEFAULT_NETWORK"
+     echo "ENABLE_NO_OVERLAY" = $ENABLE_NO_OVERLAY
      echo "OVN_ENABLE_INTERCONNECT = $OVN_ENABLE_INTERCONNECT"
      if [ "$OVN_ENABLE_INTERCONNECT" == true ]; then
        echo "KIND_NUM_NODES_PER_ZONE = $KIND_NUM_NODES_PER_ZONE"
@@ -628,6 +633,19 @@ set_default_params() {
     exit 1
   fi
   ADVERTISE_DEFAULT_NETWORK=${ADVERTISE_DEFAULT_NETWORK:-false}
+  ENABLE_NO_OVERLAY=${ENABLE_NO_OVERLAY:-false}
+  if [ "$ENABLE_NO_OVERLAY" == true ] && [ "$ENABLE_MULTI_NET" != true ]; then
+    echo "No-overlay mode requires multi-network to be enabled (-mne)"
+    exit 1
+  fi
+  if [ "$ENABLE_NO_OVERLAY" == true ] && [ "$ENABLE_ROUTE_ADVERTISEMENTS" != true ]; then
+    echo "No-overlay mode requires route advertisement to be enabled (-rae)"
+    exit 1
+  fi
+  if [ "$ENABLE_NO_OVERLAY" == true ] && [ "$ADVERTISE_DEFAULT_NETWORK" != true ]; then
+    echo "No-overlay mode requires advertise the default network (-adv)"
+    exit 1
+  fi
   OVN_COMPACT_MODE=${OVN_COMPACT_MODE:-false}
   if [ "$OVN_COMPACT_MODE" == true ]; then
     KIND_NUM_WORKER=0
@@ -877,6 +895,7 @@ create_ovn_kube_manifests() {
     --network-segmentation-enable="${ENABLE_NETWORK_SEGMENTATION}" \
     --route-advertisements-enable="${ENABLE_ROUTE_ADVERTISEMENTS}" \
     --advertise-default-network="${ADVERTISE_DEFAULT_NETWORK}" \
+    --no-overlay-enable="${ENABLE_NO_OVERLAY}" \
     --ovnkube-metrics-scale-enable="${OVN_METRICS_SCALE_ENABLE}" \
     --compact-mode="${OVN_COMPACT_MODE}" \
     --enable-interconnect="${OVN_ENABLE_INTERCONNECT}" \
@@ -1214,4 +1233,8 @@ if [ "$KIND_INSTALL_KUBEVIRT" == true ]; then
 fi
 if [ "$ENABLE_ROUTE_ADVERTISEMENTS" == true ]; then
   install_ffr_k8s
+fi
+sleep 30
+if [ "$ENABLE_NO_OVERLAY" == true ]; then
+  enable_no_overlay
 fi
