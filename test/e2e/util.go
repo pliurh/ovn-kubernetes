@@ -44,7 +44,7 @@ const (
 	ovnGatewayMTUSupport = "k8s.ovn.org/gateway-mtu-support"
 )
 
-var containerRuntime = "docker"
+var containerRuntime = "podman"
 var singleNodePerZoneResult *bool
 
 func init() {
@@ -1108,6 +1108,11 @@ func isInterconnectEnabled() bool {
 func isLocalGWModeEnabled() bool {
 	val, present := os.LookupEnv("OVN_GATEWAY_MODE")
 	return present && val == "local"
+}
+
+func isDefaultNetworkAdvertised() bool {
+	val, present := os.LookupEnv("ADVERTISE_DEFAULT_NETWORK")
+	return present && val == "true"
 }
 
 func singleNodePerZone() bool {

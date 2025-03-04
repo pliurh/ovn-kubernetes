@@ -452,6 +452,7 @@ func createClusterExternalContainer(containerName string, containerImage string,
 	if err != nil {
 		framework.Failf("failed to inspect external test container for its IP (v6): %v", err)
 	}
+	framework.Logf("external test container %s started with IPv4 %s and IPv6 %s", containerName, ipv4, ipv6)
 	if ipv4 == "" && ipv6 == "" {
 		framework.Failf("failed to get IPv4 or IPv6 address for container %s", containerName)
 	}
@@ -549,7 +550,7 @@ func createPod(f *framework.Framework, podName, nodeSelector, namespace string, 
 
 // Get the IP address of a pod in the specified namespace
 func getPodAddress(podName, namespace string) string {
-	podIP, err := e2ekubectl.RunKubectl(namespace, "get", "pods", podName, "--template={{.status.podIP}}")
+podIP, err := e2ekubectl.RunKubectl(namespace, "get", "pods", podName, "--template={{.status.podIP}}")
 	if err != nil {
 		framework.Failf("Unable to retrieve the IP for pod %s %v", podName, err)
 	}
