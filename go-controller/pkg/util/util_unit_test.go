@@ -14,6 +14,8 @@ import (
 	ovntest "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/testing"
 	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
 	ovntypes "github.com/ovn-org/ovn-kubernetes/go-controller/pkg/types"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -366,4 +368,77 @@ func TestGenerateId(t *testing.T) {
 func TestGetNetworkScopedK8sMgmtHostIntfName(t *testing.T) {
 	intfName := GetNetworkScopedK8sMgmtHostIntfName(1245678)
 	assert.Equal(t, "ovn-k8s-mp12456", intfName)
+}
+
+func TestFindServicePortForEndpointSlicePort(t *testing.T) {
+	tcp := v1.ProtocolTCP
+	udp := v1.ProtocolUDP
+
+	tests := []struct {
+		name                      string
+		service                   *v1.Service
+		endpointslicePortName     string
+		endpointslicePortProtocol v1.Protocol
+		wantPort                  *v1.ServicePort
+		wantErr                   bool
+	}{
+		{
+			name: "Match named port with TCP protocol",
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-ns",
+					Name:      "test-svc",
+				},
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{Name: "http", Protocol: tcp, Port: 80},
+						{Name: "https", Protocol: tcp, Port: 443},
+					},
+				},
+			},
+			endpointslicePortName:     "http",
+			endpointslicePortProtocol: tcp,
+			wantPort:                  &v1.ServicePort{Name: "http", Protocol: tcp, Port: 80},
+			wantErr:                   false,
+		},
+		{
+			name: "Protocol mismatch",
+			service: &v1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-ns",
+					Name:      "test-svc",
+				},
+				Spec: v1.ServiceSpec{
+					Ports: []v1.ServicePort{
+						{Name: "dns", Protocol: tcp, Port: 53},
+					},
+				},
+			},
+			endpointslicePortName:     "dns",
+			endpointslicePortProtocol: udp,
+			wantPort:                  nil,
+			wantErr:                   true,
+		},
+		{
+			name:                      "Nil service input",
+			service:                   nil,
+			endpointslicePortName:     "web",
+			endpointslicePortProtocol: tcp,
+			wantPort:                  nil,
+			wantErr:                   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := FindServicePortForEndpointSlicePort(tt.service, tt.endpointslicePortName, tt.endpointslicePortProtocol)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, got)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantPort, got)
+			}
+		})
+	}
 }
